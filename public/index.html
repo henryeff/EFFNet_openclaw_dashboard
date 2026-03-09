@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EFFNet OpenClaw Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>EFFNet OpenClaw Dashboard</h1>
+    <div class="topbar-right">
+      <button id="themeToggle" class="theme-btn">🌙 Dark</button>
+      <div id="meta"></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="logs">Logs</button>
+    <button class="tab-btn" data-tab="todos">Todo</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+  </nav>
+
+  <main class="panel active" id="tab-dashboard">
+    <section class="dashboard-wrap">
+      <div class="section-title">Agents Overview</div>
+      <div id="dashboardAgents" class="dashboard-grid"></div>
+    </section>
+  </main>
+
+  <main class="panel" id="tab-logs">
+    <section class="layout">
+      <section class="left">
+        <div class="section-title">Agents Registry</div>
+        <div id="agents" class="agent-list"></div>
+      </section>
+
+      <section class="right">
+        <div class="logs-header">
+          <div>
+            <div class="section-title" id="logTitle">Agent Logs</div>
+            <div class="hint">Streaming latest lines (newest on top) · <span id="logSource">source: -</span></div>
+          </div>
+          <button id="refreshBtn">Refresh</button>
+        </div>
+        <section class="token-usage-wrap">
+          <div class="token-usage-head">
+            <div class="token-usage-title">Token Usage (Last 24h · realtime)</div>
+            <label class="token-bucket-control">Bucket
+              <select id="tokenBucketSelect">
+                <option value="5">5m</option>
+                <option value="15">15m</option>
+                <option value="30" selected>30m</option>
+                <option value="60">60m</option>
+              </select>
+            </label>
+          </div>
+          <div class="token-chart-shell">
+            <svg id="tokenUsageChart" class="token-usage-chart" viewBox="0 0 900 220" preserveAspectRatio="none"></svg>
+            <div id="tokenUsageTooltip" class="token-usage-tooltip" hidden></div>
+          </div>
+          <div id="tokenUsageLegend" class="token-usage-legend"></div>
+        </section>
+        <div id="logs" class="logs">Select an agent card from the left.</div>
+      </section>
+    </section>
+  </main>
+
+
+  <main class="panel" id="tab-todos">
+    <section class="todo-wrap">
+      <div class="todo-add">
+        <input id="todoInput" placeholder="Add new todo..." />
+        <button id="todoAddBtn">Add</button>
+      </div>
+      <div id="todoList" class="todo-list"></div>
+    </section>
+  </main>
+
+  <main class="panel" id="tab-settings">
+    <section class="settings-wrap">
+      <div class="section-title">Runtime Settings</div>
+      <form id="settingsForm" class="settings-form">
+        <label>Container Name
+          <input name="container" type="text" />
+        </label>
+        <label>Workspace Dir
+          <input name="workspaceDir" type="text" />
+        </label>
+        <label>Todo File Path
+          <input name="todoFile" type="text" />
+        </label>
+        <label>Active Window (ms)
+          <input name="activeWindowMs" type="number" />
+        </label>
+        <label>Bind Host
+          <input name="host" type="text" />
+        </label>
+        <label>Port
+          <input name="port" type="number" min="1" max="65535" />
+        </label>
+        <label>Status Mode
+          <select name="statusMode">
+            <option value="processing-only">processing-only</option>
+            <option value="recent-activity">recent-activity</option>
+          </select>
+        </label>
+        <label>Processing Window (ms)
+          <input name="processingWindowMs" type="number" />
+        </label>
+        <div class="settings-actions">
+          <button type="submit">Save Settings</button>
+          <span id="settingsMsg"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

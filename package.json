@@ -1,0 +1,14 @@
+{
+  "name": "openclaw-agent-dashboard",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Local dashboard to monitor OpenClaw agents, logs, and todos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
