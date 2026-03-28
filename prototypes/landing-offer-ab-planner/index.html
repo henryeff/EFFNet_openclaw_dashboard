@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landing Offer A/B Planner</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #111827; }
+    h1 { margin-bottom: 0.25rem; }
+    p { color: #4b5563; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    label { font-size: 0.9rem; font-weight: 600; display: block; margin-bottom: 0.2rem; }
+    input, select, button { width: 100%; padding: 0.55rem 0.7rem; border-radius: 10px; border: 1px solid #d1d5db; }
+    button { background: #111827; color: white; font-weight: 700; cursor: pointer; margin-top: 1rem; }
+    .card { margin-top: 1rem; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; }
+    .metric { font-size: 1.2rem; font-weight: 800; }
+    .small { font-size: 0.9rem; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <h1>Landing Offer A/B Planner</h1>
+  <p>Quickly estimate upside from offer + CTA tests before implementation.</p>
+
+  <div class="grid">
+    <div>
+      <label for="visitors">Monthly visitors</label>
+      <input id="visitors" type="number" value="3000" min="1" />
+    </div>
+    <div>
+      <label for="conv">Current conversion rate (%)</label>
+      <input id="conv" type="number" value="2.0" min="0" step="0.1" />
+    </div>
+    <div>
+      <label for="leadValue">Average lead value (SGD)</label>
+      <input id="leadValue" type="number" value="120" min="1" />
+    </div>
+    <div>
+      <label for="uplift">Expected uplift (%)</label>
+      <select id="uplift">
+        <option value="10">10% uplift (low)</option>
+        <option value="20" selected>20% uplift (base)</option>
+        <option value="35">35% uplift (strong)</option>
+      </select>
+    </div>
+  </div>
+
+  <button id="run">Generate Plan</button>
+
+  <div class="card" id="result"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
