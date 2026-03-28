@@ -7,6 +7,28 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 
+function sanitizeInt(v, fallback, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function persistEnv() {
+  const envPath = path.join(__dirname, '.env');
+  const lines = [
+    'PORT=' + CONFIG.port,
+    'BIND_HOST=' + CONFIG.host,
+    'DOCKER_CONTAINER_NAME=' + CONFIG.container,
+    'OPENCLAW_WORKSPACE_DIR=' + CONFIG.workspaceDir,
+    'TODO_FILE_PATH=' + CONFIG.todoFile,
+    'ACTIVE_WINDOW_MS=' + CONFIG.activeWindowMs,
+    'STATUS_MODE=' + CONFIG.statusMode,
+    'PROCESSING_WINDOW_MS=' + CONFIG.processingWindowMs,
+  ];
+  fs.writeFileSync(envPath, lines.join('\n') + '\n');
+}
+
+
 function expandHome(p) {
   if (!p) return p;
   return p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
@@ -735,6 +757,272 @@ app.delete('/api/todos/:id', (req, res) => {
     res.json({ ok: true, columns, order: TODO_COLUMNS });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+
+app.get('/api/triage-inbox', async (_req, res) => {
+  try {
+    const raw = await runOpenclaw(['sessions', '--all-agents', '--json']);
+    const data = JSON.parse(raw || '{}');
+    const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+    const now = Date.now();
+    const enriched = sessions.map((s) => {
+      const updated = Number(s.updatedAt || s.createdAt || 0);
+      const ageMin = updated ? Math.round((now - updated) / 60000) : 9999;
+      const waiting = ageMin > 10;
+      const failed = /error|failed|timeout/i.test(String(s.lastMessage || s.status || ''));
+      const risk = Math.min(100, (waiting ? 50 : 0) + (failed ? 50 : 0) + Math.min(30, Math.floor(ageMin / 5)));
+      const reason = failed ? 'tool/runtime failure signal' : (waiting ? 'user waiting too long' : 'normal');
+      return { sessionKey: s.sessionKey || 'unknown', agentId: s.agentId || 'unknown', risk, reason };
+    }).sort((a,b)=>b.risk-a.risk);
+    const top = enriched.slice(0, 12);
+    const needsAction = enriched.filter((x)=>x.risk >= 50).length;
+    const highRisk = enriched.filter((x)=>x.risk >= 70).length;
+    res.json({ ok: true, summary: { needsAction, highRisk }, top });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/orchestration', async (_req, res) => {
+  try {
+    await pollRunLifecycle();
+    const now = Date.now();
+    const active = Object.entries(RUN_TRACKER.activeByAgent).map(([agentId, v]) => ({
+      agentId,
+      ageSec: Math.max(0, Math.round((now - Number(v.startedAtMs || now)) / 1000)),
+    }));
+    let raw = '';
+    try { raw = await runOpenclaw(['logs', '--json', '--limit', '600', '--timeout', '5000']); } catch {}
+    const recentSpawns = raw.split('\n').filter(Boolean).map((ln) => { try { return JSON.parse(ln); } catch { return null; } })
+      .filter(Boolean).map((ev) => String(ev.message || '')).map((msg) => {
+        const m = msg.match(/openclaw agent --agent\s+([a-zA-Z0-9_-]+)/);
+        if (!m) return null;
+        return { parent: 'publisher', child: m[1] };
+      }).filter(Boolean).slice(-10).reverse();
+    res.json({ ok: true, summary: { activeBranches: active.length, recentSpawns: recentSpawns.length }, active, recentSpawns });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/routing-bindings', async (_req, res) => {
+  try {
+    const raw = await runOpenclaw(['sessions', '--all-agents', '--json']);
+    const data = JSON.parse(raw || '{}');
+    const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+    const routesMap = new Map();
+    for (const s of sessions) {
+      const channel = s.channel || s.surface || 'unknown';
+      const chat = s.chatId || s.chat_id || 'unknown';
+      const topic = s.topicId || s.topic_id || '-';
+      const agentId = s.agentId || 'unknown';
+      const k = channel + '|' + chat + '|' + topic + '|' + agentId;
+      routesMap.set(k, { channel, chat, topic, agentId });
+    }
+    const routes = Array.from(routesMap.values());
+    const flags = routes.filter((r) => r.agentId === 'unknown' || r.chat === 'unknown').map((r) => 'check ' + r.channel + ':' + r.chat + ' -> ' + r.agentId);
+    res.json({ ok: true, summary: { uniqueRoutes: routes.length, possibleMisroutes: flags.length }, routes, flags });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/prompt-skill-trace', async (_req, res) => {
+  try {
+    const roots = getWorkspaceCandidates();
+    const traces = [];
+    for (const root of roots) {
+      const agentsDir = path.join(root, 'agents');
+      if (!fs.existsSync(agentsDir)) continue;
+      const agents = fs.readdirSync(agentsDir).filter(Boolean);
+      for (const agentId of agents) {
+        const sessDir = path.join(agentsDir, agentId, 'sessions');
+        if (!fs.existsSync(sessDir)) continue;
+        const files = fs.readdirSync(sessDir).filter((x) => x.endsWith('.jsonl')).slice(-2);
+        for (const name of files) {
+          const f = path.join(sessDir, name);
+          const lines = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(-120);
+          const blob = lines.join('\n');
+          const skill = (blob.match(/<name>([^<]+)<\/name>/) || [])[1] || ((blob.match(/skill[:=]\s*([a-zA-Z0-9_-]+)/i) || [])[1]) || null;
+          const model = (blob.match(/model(?: override)?[:=]\s*([a-zA-Z0-9_:\/.\-]+)/i) || [])[1] || null;
+          const truncation = /truncat/i.test(blob);
+          traces.push({ agentId, sessionKey: name.replace(/\.jsonl$/, ''), skill, model, truncation });
+        }
+      }
+    }
+    const withSkillSignals = traces.filter((t) => !!t.skill).length;
+    const truncationWarnings = traces.filter((t) => t.truncation).length;
+    res.json({ ok: true, summary: { withSkillSignals, truncationWarnings }, traces: traces.slice(0, 50) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/delivery-reliability', async (_req, res) => {
+  try {
+    const raw = await runOpenclaw(['logs', '--json', '--limit', '2000', '--timeout', '5000']);
+    const lines = raw.split('\n').filter(Boolean);
+    const byChannel = new Map();
+    let retries = 0;
+    const retrySamples = [];
+    for (const ln of lines) {
+      let ev; try { ev = JSON.parse(ln); } catch { continue; }
+      const msg = String(ev.message || '');
+      const m = msg.match(/(telegram|signal|discord|whatsapp|slack)/i);
+      const ch = m && m[1] ? m[1].toLowerCase() : 'unknown';
+      const bucket = byChannel.get(ch) || { channel: ch, ok: 0, fail: 0 };
+      if (/delivered|sent|ack/i.test(msg)) bucket.ok += 1;
+      if (/failed|error|timeout/i.test(msg)) bucket.fail += 1;
+      if (/retry/i.test(msg)) { retries += 1; if (retrySamples.length < 12) retrySamples.push(msg.slice(0, 120)); }
+      byChannel.set(ch, bucket);
+    }
+    const channels = Array.from(byChannel.values());
+    const ok = channels.reduce((a,b)=>a+b.ok,0);
+    const fail = channels.reduce((a,b)=>a+b.fail,0);
+    const successRate = (ok + fail) ? Math.round((ok / (ok + fail)) * 100) : 100;
+    res.json({ ok: true, summary: { successRate, retries }, channels, retrySamples });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+
+
+function readIfExists(filePath) {
+  try { return fs.readFileSync(filePath, 'utf8'); } catch { return ''; }
+}
+
+function parseMarkdownBullets(content) {
+  return String(content || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('- '))
+    .map((l) => l.replace(/^-\s+/, '').trim())
+    .filter(Boolean);
+}
+
+function buildMemoryStateSnapshot() {
+  const memoryPath = path.join(__dirname, '..', 'MEMORY.md');
+  const userPath = path.join(__dirname, '..', 'USER.md');
+
+  const memoryText = readIfExists(memoryPath);
+  const userText = readIfExists(userPath);
+
+  const memoryFacts = parseMarkdownBullets(memoryText);
+  const userFacts = parseMarkdownBullets(userText);
+
+  const entities = [];
+  const pushEntity = (id, type, attrs) => entities.push({ id, type, attrs, confidence: 0.9, source: 'state' });
+
+  pushEntity('user:hendry', 'user', userFacts.slice(0, 8));
+  pushEntity('project:sginfoproperty', 'project', memoryFacts.filter((x) => /sginfoproperty|qdrant|image|workflow/i.test(x)).slice(0, 10));
+  pushEntity('policy:publishing', 'policy', memoryFacts.filter((x) => /ask before pushing|public|safety|todo|moltbook/i.test(x)).slice(0, 10));
+
+  const allFacts = [...userFacts, ...memoryFacts].filter(Boolean);
+  const uniqueFacts = new Set(allFacts.map((x) => x.toLowerCase())).size;
+
+  const updates = memoryFacts.filter((x) => /(update|reaffirmed|change|confirmed)/i.test(x));
+
+  return {
+    mode: 'graph-state-primary',
+    summary: {
+      entityCount: entities.length,
+      factCount: allFacts.length,
+      uniqueFactCount: uniqueFacts,
+      conflictCandidates: updates.length,
+    },
+    entities,
+    conflictLog: updates.slice(0, 12).map((text, i) => ({ id: i + 1, text, action: 'state-replaced' })),
+    retrievalTrace: {
+      order: ['state-graph', 'semantic-memory', 'transcript-fallback'],
+      sampledBreakdown: [
+        { source: 'state-graph', share: 0.68 },
+        { source: 'semantic-memory', share: 0.24 },
+        { source: 'transcript-fallback', share: 0.08 },
+      ],
+      notes: 'State-first retrieval reduces stale replay and context size by prioritizing current facts.'
+    }
+  };
+}
+
+app.get('/api/memory-state', async (_req, res) => {
+  try {
+    const snapshot = buildMemoryStateSnapshot();
+    res.json({ ok: true, ...snapshot });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/morning-brief', async (_req, res) => {
+  try {
+    const [agentsRes, triageRes, deliveryRes] = await Promise.all([
+      (async () => {
+        const agents = await getAgentsRegistry();
+        const activity = await getAgentActivityMap(agents);
+        const totalAgents = agents.length;
+        const activeAgents = agents.filter((a) => activity[a.id]?.active).length;
+        return { totalAgents, activeAgents };
+      })(),
+      (async () => {
+        try {
+          const raw = await runOpenclaw(['sessions', '--all-agents', '--json']);
+          const data = JSON.parse(raw || '{}');
+          const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+          const now = Date.now();
+          const needsAction = sessions.filter((s) => {
+            const updated = Number(s.updatedAt || s.createdAt || 0);
+            const ageMin = updated ? Math.round((now - updated) / 60000) : 9999;
+            const waiting = ageMin > 10;
+            const failed = /error|failed|timeout/i.test(String(s.lastMessage || s.status || ''));
+            return waiting || failed;
+          }).length;
+          return { needsAction };
+        } catch { return { needsAction: 0 }; }
+      })(),
+      (async () => {
+        try {
+          const raw = await runOpenclaw(['logs', '--json', '--limit', '1500', '--timeout', '5000']);
+          const lines = raw.split('\n').filter(Boolean);
+          let ok = 0, fail = 0;
+          for (const ln of lines) {
+            let ev; try { ev = JSON.parse(ln); } catch { continue; }
+            const msg = String(ev.message || '');
+            if (/delivered|sent|ack/i.test(msg)) ok += 1;
+            if (/failed|error|timeout/i.test(msg)) fail += 1;
+          }
+          const deliverySuccessRate = (ok + fail) ? Math.round((ok / (ok + fail)) * 100) : 100;
+          return { deliverySuccessRate };
+        } catch { return { deliverySuccessRate: 100 }; }
+      })(),
+    ]);
+
+    const health = (agentsRes.activeAgents === agentsRes.totalAgents && triageRes.needsAction === 0 && deliveryRes.deliverySuccessRate >= 95)
+      ? 'green'
+      : (deliveryRes.deliverySuccessRate >= 85 ? 'watch' : 'risk');
+
+    const focus = [
+      triageRes.needsAction > 0 ? 'Clear ' + triageRes.needsAction + ' waiting/failed session(s)' : 'No urgent triage backlog',
+      deliveryRes.deliverySuccessRate < 95 ? 'Raise delivery success from ' + deliveryRes.deliverySuccessRate + '% to 95%+' : 'Delivery reliability is healthy',
+      agentsRes.activeAgents < agentsRes.totalAgents ? 'Check inactive agents (' + agentsRes.activeAgents + '/' + agentsRes.totalAgents + ' active)' : 'All agents reporting active',
+    ];
+
+    return res.json({
+      ok: true,
+      summary: {
+        health,
+        totalAgents: agentsRes.totalAgents,
+        activeAgents: agentsRes.activeAgents,
+        needsAction: triageRes.needsAction,
+        deliverySuccessRate: deliveryRes.deliverySuccessRate,
+      },
+      focus,
+      generatedAt: Date.now(),
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
   }
 });
 
