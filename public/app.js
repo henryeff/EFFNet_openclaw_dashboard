@@ -38,6 +38,8 @@ const tracePanelEl = document.getElementById('tracePanel');
 const deliveryPanelEl = document.getElementById('deliveryPanel');
 const memoryStatePanelEl = document.getElementById('memoryStatePanel');
 const morningBriefPanelEl = document.getElementById('morningBriefPanel');
+const copyMorningBriefBtn = document.getElementById('copyMorningBriefBtn');
+const copyMorningBriefMsg = document.getElementById('copyMorningBriefMsg');
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
@@ -563,6 +565,9 @@ refreshBtn.addEventListener('click', async () => {
 if (tokenBucketSelect) {
   tokenBucketSelect.addEventListener('change', () => updateTokenChart());
 }
+if (copyMorningBriefBtn) {
+  copyMorningBriefBtn.addEventListener('click', copyMorningBriefText);
+}
 
 
 function renderSimpleCards(el, cards) {
@@ -700,6 +705,20 @@ async function loadMorningBriefPanel() {
   }
 }
 
+
+async function copyMorningBriefText() {
+  if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = 'Preparing...';
+  try {
+    const res = await fetch('/api/morning-brief-text');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Unable to generate brief text');
+    await navigator.clipboard.writeText(String(data.text || ''));
+    if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = 'Copied ✅';
+    setTimeout(() => { if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = ''; }, 1800);
+  } catch (e) {
+    if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = 'Copy failed: ' + e.message;
+  }
+}
 async function refreshInsights() {
   await Promise.all([loadTriageInbox(), loadOrchestrationPanel(), loadRoutingPanel(), loadTracePanel(), loadDeliveryPanel(), loadMemoryStatePanel(), loadMorningBriefPanel()]);
 }

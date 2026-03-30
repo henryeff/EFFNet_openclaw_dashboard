@@ -1026,6 +1026,47 @@ app.get('/api/morning-brief', async (_req, res) => {
   }
 });
 
+
+app.get('/api/morning-brief-text', async (_req, res) => {
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const http = require('http');
+      const req = http.request({ host: CONFIG.host, port: CONFIG.port, path: '/api/morning-brief', method: 'GET' }, (r) => {
+        let raw = '';
+        r.on('data', (c) => { raw += c; });
+        r.on('end', () => {
+          try {
+            const parsed = JSON.parse(raw || '{}');
+            if (!parsed.ok) return reject(new Error(parsed.error || 'Failed to read morning brief'));
+            resolve(parsed);
+          } catch (e) { reject(e); }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    const s = data?.summary || {};
+    const focus = Array.isArray(data?.focus) ? data.focus : [];
+    const lines = [
+      'OpenClaw Morning Ops Brief',
+      'Generated: ' + new Date(data.generatedAt || Date.now()).toISOString(),
+      '',
+      'Health: ' + String(s.health || 'unknown').toUpperCase(),
+      'Agents Active: ' + Number(s.activeAgents || 0) + '/' + Number(s.totalAgents || 0),
+      'Needs Action: ' + Number(s.needsAction || 0),
+      'Delivery Success: ' + Number(s.deliverySuccessRate || 0) + '%',
+      '',
+      'Top Focus:',
+      ...(focus.length ? focus.map((x, i) => (i + 1) + '. ' + x) : ['1. No immediate priorities detected']),
+    ];
+
+    return res.json({ ok: true, text: lines.join('\n'), generatedAt: Date.now() });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.listen(CONFIG.port, CONFIG.host, () => {
   console.log(`[dashboard] running on http://${CONFIG.host}:${CONFIG.port}`);
   console.log(`[dashboard] container: ${CONFIG.container}`);

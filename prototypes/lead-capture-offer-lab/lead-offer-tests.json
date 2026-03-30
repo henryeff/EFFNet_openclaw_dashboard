@@ -1,0 +1,142 @@
+[
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Free 15-min affordability check",
+    "cta": "Get My Plan",
+    "confidence": 80,
+    "estimatedLiftPct": 11.7
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Free 15-min affordability check",
+    "cta": "Show Me My Options",
+    "confidence": 80,
+    "estimatedLiftPct": 11.7
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Free 15-min affordability check",
+    "cta": "Unlock My Report",
+    "confidence": 80,
+    "estimatedLiftPct": 11.7
+  },
+  {
+    "audience": "Investors",
+    "headline": "Investors: ROI hotspot map + analyst notes",
+    "cta": "Get My Plan",
+    "confidence": 80,
+    "estimatedLiftPct": 11.7
+  },
+  {
+    "audience": "Investors",
+    "headline": "Investors: ROI hotspot map + analyst notes",
+    "cta": "Show Me My Options",
+    "confidence": 80,
+    "estimatedLiftPct": 11.7
+  },
+  {
+    "audience": "Investors",
+    "headline": "Investors: ROI hotspot map + analyst notes",
+    "cta": "Unlock My Report",
+    "confidence": 80,
+    "estimatedLiftPct": 11.7
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Free 15-min affordability check",
+    "cta": "Send Me The Shortlist",
+    "confidence": 72,
+    "estimatedLiftPct": 9
+  },
+  {
+    "audience": "Investors",
+    "headline": "Investors: ROI hotspot map + analyst notes",
+    "cta": "Send Me The Shortlist",
+    "confidence": 72,
+    "estimatedLiftPct": 9
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Latest new launch shortlist in 24h",
+    "cta": "Get My Plan",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Latest new launch shortlist in 24h",
+    "cta": "Show Me My Options",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: Latest new launch shortlist in 24h",
+    "cta": "Unlock My Report",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: ROI hotspot map + analyst notes",
+    "cta": "Get My Plan",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: ROI hotspot map + analyst notes",
+    "cta": "Show Me My Options",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "First-time buyers",
+    "headline": "First-time buyers: ROI hotspot map + analyst notes",
+    "cta": "Unlock My Report",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "HDB upgraders",
+    "headline": "HDB upgraders: Free 15-min affordability check",
+    "cta": "Get My Plan",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "HDB upgraders",
+    "headline": "HDB upgraders: Free 15-min affordability check",
+    "cta": "Show Me My Options",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "HDB upgraders",
+    "headline": "HDB upgraders: Free 15-min affordability check",
+    "cta": "Unlock My Report",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "HDB upgraders",
+    "headline": "HDB upgraders: Latest new launch shortlist in 24h",
+    "cta": "Get My Plan",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "HDB upgraders",
+    "headline": "HDB upgraders: Latest new launch shortlist in 24h",
+    "cta": "Show Me My Options",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  },
+  {
+    "audience": "HDB upgraders",
+    "headline": "HDB upgraders: Latest new launch shortlist in 24h",
+    "cta": "Unlock My Report",
+    "confidence": 70,
+    "estimatedLiftPct": 8.3
+  }
+]
