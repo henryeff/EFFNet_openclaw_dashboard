@@ -130,3 +130,17 @@ This branch includes a prototype workflow to speed up first-response time and mo
 - `docs/safe-logs.png`
 - `docs/safe-todos.png`
 - `docs/safe-settings.png`
+
+## Morning Brief Export Automation
+
+Save a plaintext morning brief snapshot for async handoffs:
+
+```bash
+npm run export:morning-brief
+```
+
+Optional custom dashboard URL:
+
+```bash
+DASHBOARD_URL=http://127.0.0.1:4789 npm run export:morning-brief
+```

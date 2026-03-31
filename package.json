@@ -5,7 +5,8 @@
   "description": "Local dashboard to monitor OpenClaw agents, logs, and todos",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "export:morning-brief": "node scripts/export-morning-brief.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
