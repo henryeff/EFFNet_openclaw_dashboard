@@ -115,3 +115,18 @@ openclaw-agent-dashboard/
 ## License
 
 MIT — see [LICENSE](./LICENSE)
+
+## Lead Response Accelerator Prototype (latest)
+
+This branch includes a prototype workflow to speed up first-response time and morning handoff clarity.
+
+### Visual QA captures
+- `docs/dashboard-live.png`
+- `docs/dashboard-tab-dashboard.png`
+- `docs/dashboard-tab-logs.png`
+- `docs/dashboard-tab-todos.png`
+- `docs/dashboard-tab-settings.png`
+- `docs/safe-dashboard.png`
+- `docs/safe-logs.png`
+- `docs/safe-todos.png`
+- `docs/safe-settings.png`
