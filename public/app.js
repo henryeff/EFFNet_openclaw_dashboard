@@ -31,6 +31,24 @@ const todoAddBtn = document.getElementById('todoAddBtn');
 const todoList = document.getElementById('todoList');
 const settingsForm = document.getElementById('settingsForm');
 const settingsMsg = document.getElementById('settingsMsg');
+const triageInboxEl = document.getElementById('triageInbox');
+const orchestrationPanelEl = document.getElementById('orchestrationPanel');
+const routingPanelEl = document.getElementById('routingPanel');
+const tracePanelEl = document.getElementById('tracePanel');
+const deliveryPanelEl = document.getElementById('deliveryPanel');
+const memoryStatePanelEl = document.getElementById('memoryStatePanel');
+const morningBriefPanelEl = document.getElementById('morningBriefPanel');
+const copyMorningBriefBtn = document.getElementById('copyMorningBriefBtn');
+const copyMorningBriefMsg = document.getElementById('copyMorningBriefMsg');
+const revVisitorsEl = document.getElementById('revVisitors');
+const revLeadRateEl = document.getElementById('revLeadRate');
+const revCloseRateEl = document.getElementById('revCloseRate');
+const revDealValueEl = document.getElementById('revDealValue');
+const revTargetEl = document.getElementById('revTarget');
+const revUpliftEl = document.getElementById('revUplift');
+const revCalcBtn = document.getElementById('revCalcBtn');
+const revCalcMsg = document.getElementById('revCalcMsg');
+const revenueEstimatorCardsEl = document.getElementById('revenueEstimatorCards');
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
@@ -550,20 +568,286 @@ refreshBtn.addEventListener('click', async () => {
   await refreshAgentsOnly();
   startLogStream();
   await updateTokenChart();
+  await refreshInsights();
 });
 
 if (tokenBucketSelect) {
   tokenBucketSelect.addEventListener('change', () => updateTokenChart());
+}
+if (copyMorningBriefBtn) {
+  copyMorningBriefBtn.addEventListener('click', copyMorningBriefText);
+}
+
+
+function revenueNumber(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function formatMoney(n) {
+  return '$' + Math.round(n).toLocaleString();
+}
+
+function computeRevenueEstimator() {
+  const visitors = revenueNumber(revVisitorsEl?.value);
+  const leadRate = revenueNumber(revLeadRateEl?.value) / 100;
+  const closeRate = revenueNumber(revCloseRateEl?.value) / 100;
+  const dealValue = revenueNumber(revDealValueEl?.value);
+  const target = revenueNumber(revTargetEl?.value);
+  const uplift = revenueNumber(revUpliftEl?.value) / 100;
+
+  const baselineLeads = visitors * leadRate;
+  const baselineDeals = baselineLeads * closeRate;
+  const baselineRevenue = baselineDeals * dealValue;
+
+  const upliftLeadRate = leadRate * (1 + uplift);
+  const upliftLeads = visitors * upliftLeadRate;
+  const upliftDeals = upliftLeads * closeRate;
+  const upliftRevenue = upliftDeals * dealValue;
+
+  const gapNow = Math.max(0, target - baselineRevenue);
+  const gapAfterUplift = Math.max(0, target - upliftRevenue);
+
+  return {
+    baselineLeads,
+    baselineDeals,
+    baselineRevenue,
+    upliftRevenue,
+    upliftDelta: upliftRevenue - baselineRevenue,
+    gapNow,
+    gapAfterUplift,
+  };
+}
+
+function renderRevenueEstimator() {
+  if (!revenueEstimatorCardsEl) return;
+  const m = computeRevenueEstimator();
+  renderSimpleCards(revenueEstimatorCardsEl, [
+    {
+      title: 'Current Funnel Output',
+      value: formatMoney(m.baselineRevenue),
+      items: [
+        'monthly leads: ' + Math.round(m.baselineLeads).toLocaleString(),
+        'closed deals: ' + Math.round(m.baselineDeals).toLocaleString(),
+        'target gap: ' + formatMoney(m.gapNow),
+      ],
+    },
+    {
+      title: 'If Uplift Lands',
+      value: formatMoney(m.upliftRevenue),
+      items: [
+        'incremental upside: ' + formatMoney(m.upliftDelta),
+        'remaining target gap: ' + formatMoney(m.gapAfterUplift),
+      ],
+    },
+    {
+      title: 'Suggested Priority',
+      items: [
+        m.gapAfterUplift > 0 ? 'Add offer + CTA test this week to close remaining gap.' : 'Target can be hit with this uplift scenario.',
+        m.upliftDelta > 15000 ? 'High upside: prioritize tonight.' : 'Moderate upside: bundle with low-effort automation.',
+      ],
+    },
+  ]);
+
+  try {
+    localStorage.setItem('revenueEstimatorInputs', JSON.stringify({
+      visitors: revVisitorsEl?.value || '',
+      leadRate: revLeadRateEl?.value || '',
+      closeRate: revCloseRateEl?.value || '',
+      dealValue: revDealValueEl?.value || '',
+      target: revTargetEl?.value || '',
+      uplift: revUpliftEl?.value || '',
+    }));
+    if (revCalcMsg) {
+      revCalcMsg.textContent = 'Updated';
+      setTimeout(() => { if (revCalcMsg) revCalcMsg.textContent = ''; }, 1200);
+    }
+  } catch {}
+}
+
+function loadRevenueEstimatorDefaults() {
+  if (!revVisitorsEl) return;
+  try {
+    const raw = localStorage.getItem('revenueEstimatorInputs');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved.visitors) revVisitorsEl.value = saved.visitors;
+    if (saved.leadRate) revLeadRateEl.value = saved.leadRate;
+    if (saved.closeRate) revCloseRateEl.value = saved.closeRate;
+    if (saved.dealValue) revDealValueEl.value = saved.dealValue;
+    if (saved.target) revTargetEl.value = saved.target;
+    if (saved.uplift) revUpliftEl.value = saved.uplift;
+  } catch {}
+}
+
+if (revCalcBtn) {
+  revCalcBtn.addEventListener('click', renderRevenueEstimator);
+}
+
+function renderSimpleCards(el, cards) {
+  if (!el) return;
+  if (!cards || !cards.length) { el.innerHTML = '<div class="insight-card">No data</div>'; return; }
+  el.innerHTML = cards.map((c) => '<div class="insight-card"><h4>' + escapeHtml(c.title || 'Untitled') + '</h4>' + (c.value ? '<div class="metric-big">' + escapeHtml(String(c.value)) + '</div>' : '') + (c.items && c.items.length ? '<ul class="insight-list">' + c.items.map((it) => '<li>' + escapeHtml(String(it)) + '</li>').join('') + '</ul>' : '') + '</div>').join('');
+}
+
+async function loadTriageInbox() {
+  try {
+    const res = await fetch('/api/triage-inbox');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'triage error');
+    renderSimpleCards(triageInboxEl, [
+      { title: 'Needs Action', value: data.summary.needsAction, items: data.top.map((x) => x.agentId + ' · ' + x.reason) },
+      { title: 'High Risk', value: data.summary.highRisk, items: data.top.filter((x) => x.risk >= 70).map((x) => x.sessionKey) },
+    ]);
+  } catch (e) {
+    renderSimpleCards(triageInboxEl, [{ title: 'Triage error', items: [e.message] }]);
+  }
+}
+
+async function loadOrchestrationPanel() {
+  try {
+    const res = await fetch('/api/orchestration');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'orchestration error');
+    renderSimpleCards(orchestrationPanelEl, [
+      { title: 'Active Branches', value: data.summary.activeBranches, items: data.active.map((x) => x.agentId + ' · ' + x.ageSec + 's') },
+      { title: 'Recent Spawns', value: data.summary.recentSpawns, items: data.recentSpawns.slice(0,5).map((x) => x.parent + ' → ' + x.child) },
+    ]);
+  } catch (e) {
+    renderSimpleCards(orchestrationPanelEl, [{ title: 'Orchestration error', items: [e.message] }]);
+  }
+}
+
+async function loadRoutingPanel() {
+  try {
+    const res = await fetch('/api/routing-bindings');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'routing error');
+    renderSimpleCards(routingPanelEl, [
+      { title: 'Unique Routes', value: data.summary.uniqueRoutes, items: data.routes.slice(0,6).map((x) => (x.channel || 'unknown') + ' · ' + x.agentId + ' · ' + (x.chat || '-')) },
+      { title: 'Potential Misroutes', value: data.summary.possibleMisroutes, items: data.flags.slice(0,6) },
+    ]);
+  } catch (e) {
+    renderSimpleCards(routingPanelEl, [{ title: 'Routing error', items: [e.message] }]);
+  }
+}
+
+async function loadTracePanel() {
+  try {
+    const res = await fetch('/api/prompt-skill-trace');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'trace error');
+    renderSimpleCards(tracePanelEl, [
+      { title: 'Runs with Skills', value: data.summary.withSkillSignals, items: data.traces.slice(0,6).map((x) => x.agentId + ' · ' + (x.skill || 'n/a') + ' · model ' + (x.model || 'unknown')) },
+      { title: 'Truncation Warnings', value: data.summary.truncationWarnings, items: data.traces.filter((x) => x.truncation).slice(0,6).map((x) => x.sessionKey) },
+    ]);
+  } catch (e) {
+    renderSimpleCards(tracePanelEl, [{ title: 'Trace error', items: [e.message] }]);
+  }
+}
+
+async function loadDeliveryPanel() {
+  try {
+    const res = await fetch('/api/delivery-reliability');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'delivery error');
+    renderSimpleCards(deliveryPanelEl, [
+      { title: 'Delivery Success', value: data.summary.successRate + '%', items: data.channels.slice(0,6).map((x) => x.channel + ' · ok:' + x.ok + ' fail:' + x.fail) },
+      { title: 'Retry Outcomes', value: data.summary.retries, items: data.retrySamples.slice(0,6) },
+    ]);
+  } catch (e) {
+    renderSimpleCards(deliveryPanelEl, [{ title: 'Delivery error', items: [e.message] }]);
+  }
+}
+
+
+
+async function loadMemoryStatePanel() {
+  try {
+    const res = await fetch('/api/memory-state');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'memory-state error');
+    const breakdown = (data.retrievalTrace?.sampledBreakdown || []).map((x) => x.source + ' · ' + Math.round((x.share || 0) * 100) + '%');
+    renderSimpleCards(memoryStatePanelEl, [
+      {
+        title: 'Memory Mode',
+        value: data.mode || 'unknown',
+        items: [
+          'entities: ' + (data.summary?.entityCount ?? 0),
+          'facts: ' + (data.summary?.factCount ?? 0),
+          'unique facts: ' + (data.summary?.uniqueFactCount ?? 0),
+        ],
+      },
+      {
+        title: 'Conflict/Replacement Log',
+        value: data.summary?.conflictCandidates ?? 0,
+        items: (data.conflictLog || []).slice(0, 5).map((x) => x.text),
+      },
+      {
+        title: 'Retrieval Trace',
+        items: breakdown.length ? breakdown : ['No retrieval trace data'],
+      },
+    ]);
+  } catch (e) {
+    renderSimpleCards(memoryStatePanelEl, [{ title: 'Memory state error', items: [e.message] }]);
+  }
+}
+
+
+async function loadMorningBriefPanel() {
+  try {
+    const res = await fetch('/api/morning-brief');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'morning brief error');
+    renderSimpleCards(morningBriefPanelEl, [
+      {
+        title: 'Health Snapshot',
+        value: data.summary.health,
+        items: [
+          'active agents: ' + data.summary.activeAgents + '/' + data.summary.totalAgents,
+          'needs action: ' + data.summary.needsAction,
+          'delivery success: ' + data.summary.deliverySuccessRate + '%',
+        ],
+      },
+      {
+        title: 'Top Focus Today',
+        items: (data.focus || []).map((x) => x),
+      },
+    ]);
+  } catch (e) {
+    renderSimpleCards(morningBriefPanelEl, [{ title: 'Morning brief error', items: [e.message] }]);
+  }
+}
+
+
+async function copyMorningBriefText() {
+  if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = 'Preparing...';
+  try {
+    const res = await fetch('/api/morning-brief-text');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Unable to generate brief text');
+    await navigator.clipboard.writeText(String(data.text || ''));
+    if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = 'Copied ✅';
+    setTimeout(() => { if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = ''; }, 1800);
+  } catch (e) {
+    if (copyMorningBriefMsg) copyMorningBriefMsg.textContent = 'Copy failed: ' + e.message;
+  }
+}
+async function refreshInsights() {
+  await Promise.all([loadTriageInbox(), loadOrchestrationPanel(), loadRoutingPanel(), loadTracePanel(), loadDeliveryPanel(), loadMemoryStatePanel(), loadMorningBriefPanel()]);
 }
 
 async function boot() {
   await refreshAgentsOnly();
   startLogStream();
   await updateTokenChart();
+  await refreshInsights();
+  loadRevenueEstimatorDefaults();
+  renderRevenueEstimator();
 }
 
 boot();
-agentsTimer = setInterval(refreshAgentsOnly, 5000);
+agentsTimer = setInterval(async () => { await refreshAgentsOnly(); await refreshInsights(); }, 5000);
 tokenChartTimer = setInterval(updateTokenChart, 10000);
 
 window.addEventListener('beforeunload', () => {

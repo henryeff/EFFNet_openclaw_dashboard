@@ -26,6 +26,44 @@
     <section class="dashboard-wrap">
       <div class="section-title">Agents Overview</div>
       <div id="dashboardAgents" class="dashboard-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Session Triage Inbox</div>
+      <div id="triageInbox" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Sub-agent Orchestration Panel</div>
+      <div id="orchestrationPanel" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Routing & Bindings Visualizer</div>
+      <div id="routingPanel" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Prompt / Skill Trace View</div>
+      <div id="tracePanel" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Delivery Reliability Dashboard</div>
+      <div id="deliveryPanel" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Memory State Index (Graph vs Transcript)</div>
+      <div id="memoryStatePanel" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Morning Ops Brief <button id="copyMorningBriefBtn" style="margin-left:8px;">Copy text</button> <span id="copyMorningBriefMsg" class="hint"></span></div>
+      <div id="morningBriefPanel" class="insight-grid"></div>
+
+      <div class="section-title" style="margin-top:14px;">Revenue Opportunity Estimator</div>
+      <div class="revenue-estimator">
+        <div class="revenue-grid">
+          <label>Monthly visitors<input id="revVisitors" type="number" min="0" value="12000" /></label>
+          <label>Lead conversion %<input id="revLeadRate" type="number" min="0" step="0.1" value="2.2" /></label>
+          <label>Close rate %<input id="revCloseRate" type="number" min="0" step="0.1" value="12" /></label>
+          <label>Average deal value ($)<input id="revDealValue" type="number" min="0" value="3200" /></label>
+          <label>Target monthly revenue ($)<input id="revTarget" type="number" min="0" value="150000" /></label>
+          <label>Expected conversion uplift %<input id="revUplift" type="number" min="0" step="0.1" value="15" /></label>
+        </div>
+        <div class="revenue-actions">
+          <button id="revCalcBtn">Recalculate</button>
+          <span id="revCalcMsg" class="hint"></span>
+        </div>
+        <div id="revenueEstimatorCards" class="insight-grid"></div>
+      </div>
     </section>
   </main>
 
