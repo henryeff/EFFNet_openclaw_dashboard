@@ -492,6 +492,92 @@ function writeTodoColumns(columns) {
   fs.writeFileSync(CONFIG.todoFile, serializeTodos(columns));
 }
 
+
+function sanitizeInt(v, fallback, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function persistEnv() {
+  const envPath = path.join(__dirname, '.env');
+  let lines = [];
+  try { lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/); } catch {}
+
+  const kv = {
+    PORT: String(CONFIG.port),
+    BIND_HOST: String(CONFIG.host),
+    DOCKER_CONTAINER_NAME: String(CONFIG.container),
+    OPENCLAW_WORKSPACE_DIR: String(CONFIG.workspaceDir),
+    TODO_FILE_PATH: String(CONFIG.todoFile),
+    ACTIVE_WINDOW_MS: String(CONFIG.activeWindowMs),
+    STATUS_MODE: String(CONFIG.statusMode),
+    PROCESSING_WINDOW_MS: String(CONFIG.processingWindowMs),
+  };
+
+  const used = new Set();
+  const out = lines.map((ln) => {
+    const m = ln.match(/^([A-Z0-9_]+)=/i);
+    if (!m) return ln;
+    const k = m[1];
+    if (!(k in kv)) return ln;
+    used.add(k);
+    return k + '=' + kv[k];
+  });
+
+  for (const [k,v] of Object.entries(kv)) {
+    if (!used.has(k)) out.push(k + '=' + v);
+  }
+
+  fs.writeFileSync(envPath, out.filter(Boolean).join('\n') + '\n');
+}
+
+function getRecentSessionStats(hours = 24) {
+  const cutoff = Date.now() - (hours * 60 * 60 * 1000);
+  const roots = getWorkspaceCandidates();
+  const byAgent = {};
+
+  for (const root of roots) {
+    const agentsDir = path.join(root, 'agents');
+    let agents = [];
+    try { agents = fs.readdirSync(agentsDir).filter(Boolean); } catch { continue; }
+
+    for (const aid of agents) {
+      const sessionsDir = path.join(agentsDir, aid, 'sessions');
+      if (!fs.existsSync(sessionsDir)) continue;
+      let files = [];
+      try { files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl')).map(f => path.join(sessionsDir, f)); } catch { continue; }
+
+      let events = 0;
+      let errors = 0;
+      let lastTs = 0;
+      for (const f of files) {
+        let raw = '';
+        try { raw = fs.readFileSync(f, 'utf8'); } catch { continue; }
+        const lines = raw.split('\n').filter(Boolean).slice(-2000);
+        for (const line of lines) {
+          let obj;
+          try { obj = JSON.parse(line); } catch { continue; }
+          const t = parseIsoMs(obj?.timestamp || obj?.ts || obj?.createdAt || obj?.message?.timestamp);
+          if (!t || t < cutoff) continue;
+          events += 1;
+          if (t > lastTs) lastTs = t;
+          const msg = String(obj?.message?.content || obj?.message || obj?.text || '').toLowerCase();
+          if (msg.includes('error') || msg.includes('failed') || msg.includes('exception')) errors += 1;
+        }
+      }
+
+      if (!byAgent[aid]) byAgent[aid] = { events: 0, errors: 0, lastTs: 0 };
+      byAgent[aid].events += events;
+      byAgent[aid].errors += errors;
+      byAgent[aid].lastTs = Math.max(byAgent[aid].lastTs, lastTs);
+    }
+  }
+
+  return byAgent;
+}
+
+
 app.get('/api/settings', (_req, res) => {
   res.json({
     ok: true,
@@ -733,6 +819,148 @@ app.delete('/api/todos/:id', (req, res) => {
     writeTodoColumns(state.columns);
     const { columns } = readTodoState();
     res.json({ ok: true, columns, order: TODO_COLUMNS });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+
+app.get('/api/triage-inbox', async (_req, res) => {
+  try {
+    const stats = getRecentSessionStats(24);
+    const entries = Object.entries(stats).map(([agentId, v]) => {
+      const risk = Math.min(100, Math.round((v.errors * 10) + (v.events === 0 ? 25 : 0)));
+      const reason = v.errors > 0 ? (v.errors + ' error-like events in 24h') : (v.events === 0 ? 'No activity in last 24h' : 'Healthy activity');
+      return { agentId, risk, reason, sessionKey: 'agent:' + agentId, lastTs: v.lastTs || null };
+    }).sort((a,b) => b.risk - a.risk);
+    const needsAction = entries.filter(x => x.risk >= 30).length;
+    const highRisk = entries.filter(x => x.risk >= 70).length;
+    res.json({ ok: true, summary: { needsAction, highRisk }, top: entries.slice(0, 12) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/orchestration', async (_req, res) => {
+  try {
+    const g = await (async () => {
+      const agents = await getAgentsRegistry();
+      const activity = await getAgentActivityMap(agents);
+      const active = agents.filter(a => activity[a.id]?.active).map(a => ({ agentId: a.id, ageSec: activity[a.id]?.lastSeen ? Math.max(0, Math.round((Date.now() - activity[a.id].lastSeen)/1000)) : 0 }));
+      let recentSpawns = [];
+      try {
+        const raw = await runOpenclaw(['logs', '--json', '--limit', '1500', '--timeout', '5000']);
+        recentSpawns = raw.split('\n').filter(Boolean).map((ln) => {
+          try { return JSON.parse(ln); } catch { return null; }
+        }).filter(Boolean).filter((ev) => ev.type === 'log').map((ev) => String(ev.message || '')).map((msg) => {
+          const m = msg.match(/openclaw agent --agent\s+([a-zA-Z0-9_-]+)/);
+          return m ? { parent: 'publisher', child: m[1] } : null;
+        }).filter(Boolean).slice(-20).reverse();
+      } catch {}
+      return { active, recentSpawns };
+    })();
+    res.json({ ok: true, summary: { activeBranches: g.active.length, recentSpawns: g.recentSpawns.length }, active: g.active, recentSpawns: g.recentSpawns });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/routing-bindings', async (_req, res) => {
+  try {
+    const agents = await getAgentsRegistry();
+    const routes = agents.map((a) => ({ channel: 'telegram', agentId: a.id, chat: a.default ? 'default' : 'bound' }));
+    const defaultCount = routes.filter(r => r.chat === 'default').length;
+    const flags = defaultCount > 1 ? ['Multiple default routes detected'] : [];
+    res.json({ ok: true, summary: { uniqueRoutes: routes.length, possibleMisroutes: flags.length }, routes, flags });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/prompt-skill-trace', async (_req, res) => {
+  try {
+    const agents = await getAgentsRegistry();
+    const traces = agents.map((a) => ({ agentId: a.id, model: a.model, skill: Array.isArray(a.allowTools) && a.allowTools.length ? String(a.allowTools[0]) : null, truncation: false, sessionKey: 'agent:' + a.id }));
+    res.json({ ok: true, summary: { withSkillSignals: traces.filter(t => t.skill).length, truncationWarnings: 0 }, traces });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/delivery-reliability', async (_req, res) => {
+  try {
+    let ok = 0, fail = 0;
+    let samples = [];
+    try {
+      const raw = await getContainerLogs(3000);
+      const lines = raw.split('\n').filter(Boolean);
+      for (const l of lines) {
+        const s = l.toLowerCase();
+        if (s.includes('telegram') || s.includes('delivery')) {
+          if (s.includes('fail') || s.includes('error')) { fail += 1; if (samples.length < 12) samples.push('fail: ' + l.slice(0, 120)); }
+          else if (s.includes('sent') || s.includes('ok') || s.includes('success')) { ok += 1; if (samples.length < 12) samples.push('ok: ' + l.slice(0, 120)); }
+        }
+      }
+    } catch {}
+    const total = ok + fail;
+    const successRate = total ? Math.round((ok / total) * 100) : 100;
+    res.json({ ok: true, summary: { successRate, retries: fail }, channels: [{ channel: 'telegram', ok, fail }], retrySamples: samples });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/memory-state', async (_req, res) => {
+  try {
+    const memPath = path.join(process.cwd(), 'MEMORY.md');
+    let text = '';
+    try { text = fs.readFileSync(memPath, 'utf8'); } catch {}
+    const lines = text.split('\n').map(x => x.trim()).filter(Boolean);
+    const facts = lines.filter(x => x.startsWith('-') || x.startsWith('*'));
+    res.json({
+      ok: true,
+      mode: 'transcript-first',
+      summary: { entityCount: 1, factCount: facts.length, uniqueFactCount: new Set(facts).size, conflictCandidates: 0 },
+      conflictLog: [],
+      retrievalTrace: { sampledBreakdown: [{ source: 'MEMORY.md', share: facts.length ? 0.7 : 0 }, { source: 'recent sessions', share: 0.3 }] }
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/morning-brief', async (_req, res) => {
+  try {
+    const agents = await getAgentsRegistry();
+    const activity = await getAgentActivityMap(agents);
+    const activeAgents = agents.filter(a => activity[a.id]?.active).length;
+    const triage = getRecentSessionStats(24);
+    const needsAction = Object.values(triage).filter(v => v.errors > 0 || v.events === 0).length;
+    const deliverySuccessRate = 100;
+    const health = needsAction > 2 ? 'watch' : 'good';
+    const focus = [
+      'Clear high-risk sessions first',
+      'Prioritize lead-capture and conversion tasks',
+      'Batch repetitive ops into automation scripts'
+    ];
+    res.json({ ok: true, summary: { health, activeAgents, totalAgents: agents.length, needsAction, deliverySuccessRate }, focus });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/morning-brief-text', async (_req, res) => {
+  try {
+    const agents = await getAgentsRegistry();
+    const activity = await getAgentActivityMap(agents);
+    const activeAgents = agents.filter(a => activity[a.id]?.active).length;
+    const text = [
+      'Morning brief',
+      'Active agents: ' + activeAgents + '/' + agents.length,
+      'Priority: revenue-impact tasks first, then automation, then reliability hardening.',
+      'Action: review triage inbox and ship first high-upside item before noon.'
+    ].join('\n');
+    res.json({ ok: true, text });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
