@@ -115,3 +115,14 @@ openclaw-agent-dashboard/
 ## License
 
 MIT — see [LICENSE](./LICENSE)
+
+## Lead Response SLA Simulator (Prototype)
+
+A standalone revenue prototype is available at:
+
+- `/lead-response-simulator.html`
+
+Purpose:
+- model revenue upside from faster lead response times
+- estimate extra deals/month and incremental monthly revenue
+- support quick decision-making for callback SLA investments

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lead Response Simulator</title>
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1220;color:#e6eefc;margin:0;padding:24px}
+    .wrap{max-width:1000px;margin:0 auto}
+    .card{background:#101a2d;border:1px solid #263246;border-radius:12px;padding:16px;margin-bottom:14px}
+    h1{margin:0 0 8px;font-size:26px}
+    p{color:#9fb0cc}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+    label{display:flex;flex-direction:column;font-size:12px;color:#9fb0cc;gap:6px}
+    input{border:1px solid #2e3d57;border-radius:8px;padding:9px;background:#0f1729;color:#e6eefc}
+    button{margin-top:12px;border:1px solid #2e3d57;border-radius:8px;padding:9px 12px;background:#17233b;color:#e6eefc;cursor:pointer}
+    .kpi{font-size:28px;font-weight:700}
+    .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+    .muted{font-size:12px;color:#9fb0cc}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Lead Response Time Simulator</h1>
+  <p>Estimate how faster response SLAs can lift closed deals and monthly revenue.</p>
+
+  <section class="card">
+    <div class="grid">
+      <label>Monthly inbound leads<input id="leads" type="number" value="320" min="0"></label>
+      <label>Average deal value ($)<input id="deal" type="number" value="4200" min="0"></label>
+      <label>Current response time (minutes)<input id="currentMin" type="number" value="180" min="1"></label>
+      <label>Target response time (minutes)<input id="targetMin" type="number" value="15" min="1"></label>
+      <label>Current close rate (%)<input id="closeRate" type="number" value="11" min="0" step="0.1"></label>
+      <label>Max close lift if &lt; 5 min (%)<input id="maxLift" type="number" value="45" min="0" step="0.1"></label>
+    </div>
+    <button id="calc">Recalculate upside</button>
+    <div class="muted">Model: response-time decay curve (faster response captures higher intent).</div>
+  </section>
+
+  <section class="row">
+    <div class="card"><div class="muted">Current Monthly Revenue</div><div id="revNow" class="kpi">$0</div></div>
+    <div class="card"><div class="muted">Projected Revenue at Target SLA</div><div id="revTarget" class="kpi">$0</div></div>
+    <div class="card"><div class="muted">Incremental Upside</div><div id="delta" class="kpi">$0</div></div>
+    <div class="card"><div class="muted">Extra Closed Deals / Month</div><div id="extraDeals" class="kpi">0</div></div>
+  </section>
+
+  <section class="card">
+    <div id="notes" class="muted"></div>
+  </section>
+</div>
+<script>
+function n(id){const v=Number(document.getElementById(id).value);return Number.isFinite(v)?v:0;}
+function money(v){return '$'+Math.round(v).toLocaleString();}
+function liftFactor(minutes,maxLift){
+  const m=Math.max(1,minutes);
+  const normalized=Math.min(1,Math.log10(m)/Math.log10(180));
+  const retention=1-normalized;
+  return 1 + (maxLift/100)*retention;
+}
+function run(){
+  const leads=n('leads');
+  const deal=n('deal');
+  const currentMin=n('currentMin');
+  const targetMin=n('targetMin');
+  const closeRate=n('closeRate')/100;
+  const maxLift=n('maxLift');
+
+  const currentClose=closeRate*Math.max(1, liftFactor(currentMin,maxLift)*0.75);
+  const targetClose=closeRate*liftFactor(targetMin,maxLift);
+
+  const dealsNow=leads*currentClose;
+  const dealsTarget=leads*targetClose;
+
+  const revNow=dealsNow*deal;
+  const revTarget=dealsTarget*deal;
+  const delta=Math.max(0,revTarget-revNow);
+
+  document.getElementById('revNow').textContent=money(revNow);
+  document.getElementById('revTarget').textContent=money(revTarget);
+  document.getElementById('delta').textContent=money(delta);
+  document.getElementById('extraDeals').textContent=Math.max(0,dealsTarget-dealsNow).toFixed(1);
+
+  document.getElementById('notes').innerHTML =
+    'If team response improves from <b>'+currentMin+' min</b> to <b>'+targetMin+' min</b>, estimated monthly upside is <b>'+money(delta)+
+    '</b>. Suggested next move: route HOT leads to instant notification + 15-minute callback SLA.';
+}
+document.getElementById('calc').addEventListener('click',run);
+run();
+</script>
+</body>
+</html>
