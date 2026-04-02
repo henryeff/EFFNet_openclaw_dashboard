@@ -126,3 +126,14 @@ Purpose:
 - model revenue upside from faster lead response times
 - estimate extra deals/month and incremental monthly revenue
 - support quick decision-making for callback SLA investments
+
+## CTA A/B Test Planner (Prototype)
+
+A second standalone conversion prototype is available at:
+
+- `/cta-ab-test-planner.html`
+
+Purpose:
+- estimate expected lead/revenue lift from CTA experiments
+- approximate sample size and test duration before launch
+- help prioritize high-impact conversion tests

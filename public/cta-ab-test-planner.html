@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CTA A/B Test Planner</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin: 0; background:#0b1220; color:#e2e8f0; }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 28px 18px 40px; }
+    h1 { margin: 0 0 8px; font-size: 1.7rem; }
+    .muted { color:#94a3b8; margin-bottom: 18px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
+    label { display:flex; flex-direction:column; gap:6px; font-size:.92rem; }
+    input { border:1px solid #334155; border-radius:10px; background:#111827; color:#e2e8f0; padding:10px 12px; }
+    button { margin-top:14px; background:#22c55e; border:none; color:#052e16; font-weight:700; padding:10px 14px; border-radius:10px; cursor:pointer; }
+    .cards { margin-top:18px; display:grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 12px; }
+    .card { background:#111827; border:1px solid #334155; border-radius:12px; padding:12px; }
+    .k { color:#94a3b8; font-size:.85rem; }
+    .v { margin-top:6px; font-size:1.2rem; font-weight:700; }
+    .tip { margin-top: 16px; background:#052e16; border:1px solid #166534; color:#bbf7d0; padding:12px; border-radius:10px; }
+    a { color:#93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CTA A/B Test Planner</h1>
+    <p class="muted">Prototype: estimate required traffic, projected uplift, and monthly revenue delta before launching a CTA experiment.</p>
+
+    <div class="grid">
+      <label>Current monthly visitors
+        <input id="visitors" type="number" min="0" value="12000" />
+      </label>
+      <label>Current lead conversion rate (%)
+        <input id="baseCv" type="number" min="0" step="0.01" value="2.2" />
+      </label>
+      <label>Expected uplift from variant (%)
+        <input id="uplift" type="number" min="0" step="0.1" value="12" />
+      </label>
+      <label>Close rate (%)
+        <input id="closeRate" type="number" min="0" step="0.1" value="12" />
+      </label>
+      <label>Average deal value ($)
+        <input id="dealValue" type="number" min="0" value="3200" />
+      </label>
+      <label>Confidence target (%)
+        <input id="confidence" type="number" min="50" max="99" step="1" value="95" />
+      </label>
+    </div>
+
+    <button id="calc">Calculate Plan</button>
+
+    <div class="cards" id="cards"></div>
+
+    <div class="tip" id="tip"></div>
+    <p class="muted" style="margin-top:12px;">Back to <a href="/">Dashboard</a></p>
+  </div>
+
+  <script>
+    function fmtMoney(n){ return '$' + Math.round(n).toLocaleString(); }
+    function pct(n){ return Number(n).toFixed(2) + '%'; }
+    function sampleSize(baseRate, mde, z){
+      const p = Math.max(0.0001, Math.min(0.9999, baseRate));
+      const delta = Math.max(0.0001, mde);
+      const numerator = 2 * Math.pow(z, 2) * p * (1-p);
+      return Math.ceil(numerator / Math.pow(delta,2));
+    }
+
+    function run(){
+      const visitors = Number(document.getElementById('visitors').value || 0);
+      const baseCv = Number(document.getElementById('baseCv').value || 0)/100;
+      const uplift = Number(document.getElementById('uplift').value || 0)/100;
+      const closeRate = Number(document.getElementById('closeRate').value || 0)/100;
+      const dealValue = Number(document.getElementById('dealValue').value || 0);
+      const confidence = Number(document.getElementById('confidence').value || 95);
+
+      const variantCv = baseCv * (1+uplift);
+      const baseLeads = visitors * baseCv;
+      const variantLeads = visitors * variantCv;
+      const extraLeads = Math.max(0, variantLeads - baseLeads);
+      const extraDeals = extraLeads * closeRate;
+      const extraRevenue = extraDeals * dealValue;
+
+      const z = confidence >= 99 ? 2.58 : confidence >= 95 ? 1.96 : 1.64;
+      const mde = Math.max(0.0005, variantCv - baseCv);
+      const requiredPerArm = sampleSize(baseCv, mde, z);
+      const totalRequired = requiredPerArm * 2;
+      const estDays = visitors > 0 ? Math.ceil(totalRequired / Math.max(1, visitors/30)) : 0;
+
+      const cards = [
+        ['Baseline CVR', pct(baseCv*100)],
+        ['Variant CVR (target)', pct(variantCv*100)],
+        ['Extra leads / month', Math.round(extraLeads).toLocaleString()],
+        ['Extra deals / month', extraDeals.toFixed(1)],
+        ['Projected extra revenue / month', fmtMoney(extraRevenue)],
+        ['Suggested sample size (total)', totalRequired.toLocaleString()]
+      ];
+
+      document.getElementById('cards').innerHTML = cards.map(([k,v]) =>
+        `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`
+      ).join('');
+
+      document.getElementById('tip').textContent = `Run this test for about ${estDays} day(s) at current traffic to reach ~${confidence}% confidence on the planned uplift. Prioritize high-intent pages first.`;
+    }
+
+    document.getElementById('calc').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>
