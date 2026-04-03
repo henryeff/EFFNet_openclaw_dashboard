@@ -115,3 +115,15 @@ openclaw-agent-dashboard/
 ## License
 
 MIT — see [LICENSE](./LICENSE)
+
+
+## Lead Magnet ROI Calculator (Prototype)
+
+A third standalone conversion prototype is available at:
+
+- `/lead-magnet-roi-calculator.html`
+
+Purpose:
+- estimate incremental leads/deals from lead magnet rollout
+- model net monthly upside after tooling/content cost
+- compare conservative/expected/aggressive conversion-lift scenarios

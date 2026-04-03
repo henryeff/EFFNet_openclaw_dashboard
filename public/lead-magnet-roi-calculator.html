@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lead Magnet ROI Calculator</title>
+  <style>
+    body { font-family: Inter, system-ui, Arial, sans-serif; margin: 24px; max-width: 960px; color: #111; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
+    label { display: flex; flex-direction: column; font-size: 14px; gap: 6px; }
+    input { padding: 10px; border-radius: 8px; border: 1px solid #bbb; }
+    .kpi { font-size: 24px; font-weight: 700; }
+    .sub { color: #555; font-size: 13px; }
+    button { padding: 10px 14px; border: 0; background: #111; color: #fff; border-radius: 8px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; text-align: left; padding: 10px 8px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Lead Magnet ROI Calculator</h1>
+  <p class="sub">Prototype: estimate lift from adding a lead magnet (checklist/guide/calculator) to high-traffic pages.</p>
+
+  <section class="card">
+    <div class="grid">
+      <label>Monthly unique visitors on target pages
+        <input id="visitors" type="number" value="12000" />
+      </label>
+      <label>Current lead conversion rate (%)
+        <input id="baselineCvr" type="number" value="1.8" step="0.1" />
+      </label>
+      <label>Expected CVR lift from lead magnet (%)
+        <input id="cvrLift" type="number" value="35" step="1" />
+      </label>
+      <label>Lead-to-close rate (%)
+        <input id="closeRate" type="number" value="12" step="0.1" />
+      </label>
+      <label>Average commission (SGD)
+        <input id="avgCommission" type="number" value="12000" step="500" />
+      </label>
+      <label>Monthly tool/content cost (SGD)
+        <input id="monthlyCost" type="number" value="1800" step="100" />
+      </label>
+    </div>
+    <p style="margin-top:12px;"><button id="recalcBtn">Recalculate</button></p>
+  </section>
+
+  <section class="card">
+    <div class="grid">
+      <div>
+        <div class="sub">Extra leads / month</div>
+        <div class="kpi" id="extraLeads">-</div>
+      </div>
+      <div>
+        <div class="sub">Extra closed deals / month</div>
+        <div class="kpi" id="extraDeals">-</div>
+      </div>
+      <div>
+        <div class="sub">Incremental revenue / month</div>
+        <div class="kpi" id="extraRevenue">-</div>
+      </div>
+      <div>
+        <div class="sub">Net upside after costs / month</div>
+        <div class="kpi" id="netUpside">-</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Scenario table</h3>
+    <table>
+      <thead>
+        <tr><th>Scenario</th><th>Expected CVR</th><th>Leads/mo</th><th>Net upside/mo</th></tr>
+      </thead>
+      <tbody id="scenarioRows"></tbody>
+    </table>
+  </section>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmtMoney = (n) => new Intl.NumberFormat('en-SG', { style:'currency', currency:'SGD', maximumFractionDigits:0 }).format(n);
+    const fmt = (n, d=1) => Number(n).toFixed(d);
+
+    function calcWithLift(liftPct) {
+      const visitors = Number($('visitors').value || 0);
+      const baselineCvr = Number($('baselineCvr').value || 0) / 100;
+      const closeRate = Number($('closeRate').value || 0) / 100;
+      const avgCommission = Number($('avgCommission').value || 0);
+      const monthlyCost = Number($('monthlyCost').value || 0);
+
+      const newCvr = baselineCvr * (1 + (liftPct / 100));
+      const baselineLeads = visitors * baselineCvr;
+      const newLeads = visitors * newCvr;
+      const extraLeads = Math.max(0, newLeads - baselineLeads);
+      const extraDeals = extraLeads * closeRate;
+      const extraRevenue = extraDeals * avgCommission;
+      const netUpside = extraRevenue - monthlyCost;
+      return { newCvr, newLeads, extraLeads, extraDeals, extraRevenue, netUpside };
+    }
+
+    function render() {
+      const baseLift = Number($('cvrLift').value || 0);
+      const r = calcWithLift(baseLift);
+      $('extraLeads').textContent = fmt(r.extraLeads, 1);
+      $('extraDeals').textContent = fmt(r.extraDeals, 2);
+      $('extraRevenue').textContent = fmtMoney(r.extraRevenue);
+      $('netUpside').textContent = fmtMoney(r.netUpside);
+
+      const scenarios = [
+        ['Conservative', Math.max(10, baseLift * 0.6)],
+        ['Expected', baseLift],
+        ['Aggressive', Math.max(baseLift * 1.4, baseLift + 10)],
+      ];
+
+      $('scenarioRows').innerHTML = scenarios.map(([name, lift]) => {
+        const s = calcWithLift(lift);
+        return `<tr><td>${name} (${fmt(lift,0)}% lift)</td><td>${fmt(s.newCvr * 100, 2)}%</td><td>${fmt(s.newLeads, 1)}</td><td>${fmtMoney(s.netUpside)}</td></tr>`;
+      }).join('');
+    }
+
+    $('recalcBtn').addEventListener('click', render);
+    render();
+  </script>
+</body>
+</html>
